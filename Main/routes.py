@@ -1,6 +1,6 @@
+from distutils.command import upload
 from flask import Flask, render_template, url_for, flash, redirect, request, abort
-from Main.form import (RegistrationForm,RequestResetForm, ResetPasswordForm, 
-		       LoginForm, BookForm, UploadBook, Contact, DeleteBook, UpdateAccount)
+from Main.form import (RegistrationForm,RequestResetForm, ResetPasswordForm, LoginForm, BookForm, UploadBook, Contact, DeleteBook, UpdateAccountForm, UploadBookForm)
 from Main.recomm import recom, bookdisp
 from Main.models import User
 from flask_sqlalchemy import SQLAlchemy
@@ -14,6 +14,12 @@ import numpy as np
 from flask_login import login_user, current_user, logout_user, login_required
 import csv
 from csv import writer
+from flask_table import Table, Col
+
+
+class Results(Table):
+    id = Col('Id', show=False)
+    title = Col('TOP RECOMMENDATIONS')
 
 posts = [
 	{
@@ -68,35 +74,35 @@ def login():
 	return render_template('login.html',title='Login',form=form)
 
 
-@app.route("/recommender",methods=['GET','POST'])
+@app.route("/recommender", methods=['GET', 'POST'])
 def recommender():
-	form=BookForm()
-	df=pd.read_csv("Bookz.csv")
-	if form.validate_on_submit():
-		flash(f'Here are the following recommendations for you', 'success')
-		book=form.bookname.data
-		final_list = recom(book)
-		return render_template('recommender.html',title='Recommender',form=form,final=final_list)
-	return render_template('recommender.html',title='Recommender',form=form)
+    form = BookForm()
+    df = pd.read_csv(r"C:\Users\Alfred Karanja\Downloads\Book_Recommendation_System_main\BookDataset\Bookz.csv")
+    if form.validate_on_submit():
+        if form.bookname.data in list(df['Title']):
+            flash(f'Here are the following recommendations for you', 'success')
+            book = form.bookname.data
+            final_list = recom(book)
+            return render_template('recommender.html', title='Recommender', form=form, final=final_list)
+        else:
+            flash(f'Name not clearly mentioned or does not exist in the database. Please try again.', 'danger')
+            return redirect(url_for('recommender'))
+    return render_template('recommender.html', title='Recommender', form=form)
 
-def upload(file_name, list_of_elem):
-    with open(file_name, 'a+', newline='') as write_obj:
-        csv_writer = writer(write_obj)
-        csv_writer.writerow(list_of_elem)
 
 
-@app.route("/uploadbook",methods=['GET','POST'])
+@app.route("/uploadbook", methods=['GET', 'POST'])
 @login_required
 def uploadbook():
-	form=UploadBook()
-	df=pd.read_csv('Bookz.csv')
-	if form.validate_on_submit():
-		i=max(df['index']+1)
-		li=[i,i,form.ISBN.data,form.Title.data,form.Author.data,form.Publisher.data]
-		upload('Book.csv',li)
-		flash(f'Book Uploaded Succesfully', 'success')
-		return redirect(url_for('home'))
-	return render_template('uploadbook.html',title='Upload Book',form=form)
+    form = UploadBookForm()
+    if form.validate_on_submit():
+        data = [form.ISBN.data, form.Title.data, form.Author.data, form.Publisher.data]
+        upload_book = UploadBook(r"C:\Users\Alfred Karanja\Downloads\Book_Recommendation_System_main\BookDataset\Bookz.csv")
+        upload_book.upload(data)
+        flash('Book Uploaded Successfully', 'success')
+        return redirect(url_for('home'))
+    return render_template('uploadbook.html', title='Upload Book', form=form)
+
 
 
 @app.route("/contact",methods=['GET','POST'])
@@ -106,28 +112,34 @@ def contact():
 	cur=current_user.username
 	return render_template('contact.html',title='Contact',current=cur,form=form)
 
-def delete(isbn_num,file_name):
-	lines=list()
-	with open(file_name, 'r') as readFile:
-		reader = csv.reader(readFile)
-	for row in reader:
-			lines.append(row)
-	for field in row:
-				if field == isbn_num:
-					lines.remove(row)
-	with open(file_name, 'w') as writeFile:
-				writer = csv.writer(writeFile)
-				writer.writerows(lines)
+def delete(isbn_num, file_name):
+    lines = list()
+    with open(file_name, 'r') as readFile:
+        reader = csv.reader(readFile)
+        for row in reader:
+            lines.append(row)
+        for row in lines:
+            for field in row:
+                if field == isbn_num:
+                    lines.remove(row)
+                    break
+    with open(file_name, 'w') as writeFile:
+        writer = csv.writer(writeFile)
+        writer.writerows(lines)
 
-@app.route("/deletebook",methods=['GET','POST'])
+@app.route("/deletebook", methods=['GET', 'POST'])
 @login_required
-def deletebook():
-	form=DeleteBook()
-	if form.validate_on_submit():
-		delete(form.ISBN.data,'Bookz.csv')
-		flash(f'Book is Deleted', 'success')
-		return redirect(url_for('home'))
-	return render_template('deletebook.html',title='Delete Book',form=form)
+def delete_book():
+    form = DeleteBook()
+    if form.validate_on_submit():
+        isbn_num = form.ISBN.data
+        file_name = r"C:\Users\Alfred Karanja\Downloads\Book_Recommendation_System_main\BookDataset\Bookz.csv"
+        delete(isbn_num, file_name)
+        flash(f'Book is Deleted', 'success')
+        return redirect(url_for('home'))
+    return render_template('deletebook.html', title='Delete Book', form=form)
+
+
 
 
 @app.route("/logout")
@@ -153,7 +165,7 @@ def save_picture(form_picture):
 @app.route("/account",methods=['GET','POST'])
 @login_required
 def account():
-	form = UpdateAccount()
+	form = UpdateAccountForm()
 	if form.validate_on_submit():
 		if form.picture.data:
 			pic_file=save_picture(form.picture.data)
